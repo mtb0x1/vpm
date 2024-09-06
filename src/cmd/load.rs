@@ -20,18 +20,26 @@ impl Execute for Load {
 fn load_xilinx(edif_path: &Path, constraints_path: &Path) -> Result<()> {
     let edif_path_str = edif_path.to_str().unwrap();
     let constraints_path_str = constraints_path.to_str().unwrap();
-    
+
     Command::new("yosys")
-        .args(["-p", &format!("read_edif {}; write_json design.json", edif_path_str)])
+        .args([
+            "-p",
+            &format!("read_edif {}; write_json design.json", edif_path_str),
+        ])
         .status()?;
 
     Command::new("nextpnr-xilinx")
         .args([
-            "--chipdb", "vpm_modules/chipdb-xc7a35t.bin",
-            "--xdc", constraints_path_str,
-            "--json", "design.json",
-            "--write", "output.fasm",
-            "--device", "xc7a35tcsg324-1"
+            "--chipdb",
+            "vpm_modules/chipdb-xc7a35t.bin",
+            "--xdc",
+            constraints_path_str,
+            "--json",
+            "design.json",
+            "--write",
+            "output.fasm",
+            "--device",
+            "xc7a35tcsg324-1",
         ])
         .status()?;
 
@@ -42,10 +50,14 @@ fn load_xilinx(edif_path: &Path, constraints_path: &Path) -> Result<()> {
 
     Command::new("xc7frames2bit")
         .args([
-            "--part_file", "vpm_modules/xc7a35tcsg324-1.yaml",
-            "--part_name", "xc7a35tcsg324-1",
-            "--frm_file", "output.frames",
-            "--output_file", "output.bit"
+            "--part_file",
+            "vpm_modules/xc7a35tcsg324-1.yaml",
+            "--part_name",
+            "xc7a35tcsg324-1",
+            "--frm_file",
+            "output.frames",
+            "--output_file",
+            "output.bit",
         ])
         .status()?;
 

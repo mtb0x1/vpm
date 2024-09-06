@@ -1,10 +1,9 @@
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::fs::{OpenOptions, read_to_string};
+use std::fs::{read_to_string, OpenOptions};
 use std::io::Write;
 use std::path::Path;
-use anyhow::Result;
 use toml_edit::{Array, DocumentMut, InlineTable, Item, Table, Value};
-
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Package {
@@ -32,16 +31,25 @@ impl Default for Package {
     }
 }
 
-impl VpmToml {    
+impl VpmToml {
     pub fn from(filepath: &str) -> Self {
         if !Path::new(filepath).exists() {
             let mut initial_doc = DocumentMut::new();
             initial_doc["package"] = Item::Table(Table::new());
             initial_doc["package"]["name"] = Item::Value(Value::from(Package::default().name));
-            initial_doc["package"]["version"] = Item::Value(Value::from(Package::default().version));
-            initial_doc["package"]["authors"] = Item::Value(Package::default().authors.iter().map(|s| Value::from(s.to_string())).collect::<Value>());
-            initial_doc["package"]["description"] = Item::Value(Value::from(Package::default().description));
-            initial_doc["package"]["license"] = Item::Value(Value::from(Package::default().license));
+            initial_doc["package"]["version"] =
+                Item::Value(Value::from(Package::default().version));
+            initial_doc["package"]["authors"] = Item::Value(
+                Package::default()
+                    .authors
+                    .iter()
+                    .map(|s| Value::from(s.to_string()))
+                    .collect::<Value>(),
+            );
+            initial_doc["package"]["description"] =
+                Item::Value(Value::from(Package::default().description));
+            initial_doc["package"]["license"] =
+                Item::Value(Value::from(Package::default().license));
 
             initial_doc["dependencies"] = Item::Table(Table::new());
 
@@ -51,12 +59,15 @@ impl VpmToml {
                 .truncate(true)
                 .open(filepath)
                 .expect("Failed to create vpm.toml");
-            file.write_all(initial_doc.to_string().as_bytes()).expect("Failed to write to vpm.toml");
+            file.write_all(initial_doc.to_string().as_bytes())
+                .expect("Failed to write to vpm.toml");
         }
 
         let toml_content = read_to_string(filepath).expect("Failed to read vpm.toml");
         Self {
-            toml_doc: toml_content.parse::<DocumentMut>().expect("Failed to parse vpm.toml")
+            toml_doc: toml_content
+                .parse::<DocumentMut>()
+                .expect("Failed to parse vpm.toml"),
         }
     }
 
@@ -67,12 +78,17 @@ impl VpmToml {
     pub fn add_dependency(&mut self, git: &str, commit: Option<&str>) {
         let mut dependency = InlineTable::new();
         dependency.insert("top_modules", Value::Array(Array::new()));
-        dependency.insert("commit", Value::from(commit.unwrap_or_default().to_string()));
+        dependency.insert(
+            "commit",
+            Value::from(commit.unwrap_or_default().to_string()),
+        );
         self.toml_doc["dependencies"][git] = Item::Value(Value::InlineTable(dependency));
     }
 
     pub fn add_top_module(&mut self, repo_link: &str, module_name: &str) {
-        let array = self.toml_doc["dependencies"][repo_link]["top_modules"].as_array_mut().unwrap();
+        let array = self.toml_doc["dependencies"][repo_link]["top_modules"]
+            .as_array_mut()
+            .unwrap();
         if !array.iter().any(|m| m.as_str().unwrap() == module_name) {
             array.push(Value::from(module_name));
         }
@@ -100,7 +116,8 @@ impl VpmToml {
             .truncate(true)
             .open(filepath)
             .expect("Failed to open vpm.toml");
-        file.write_all(toml_content.as_bytes()).expect("Failed to write to vpm.toml");
+        file.write_all(toml_content.as_bytes())
+            .expect("Failed to write to vpm.toml");
         Ok(())
     }
 
@@ -109,7 +126,10 @@ impl VpmToml {
         if let Some(dependencies) = self.toml_doc["dependencies"].as_table() {
             for (repo_link, dependency) in dependencies.iter() {
                 if let Some(top_modules) = dependency["top_modules"].as_array() {
-                    if top_modules.iter().any(|m| m.as_str().unwrap() == module_name) {
+                    if top_modules
+                        .iter()
+                        .any(|m| m.as_str().unwrap() == module_name)
+                    {
                         repo_links.push(repo_link.to_string());
                     }
                 }

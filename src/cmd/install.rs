@@ -1,9 +1,9 @@
 use anyhow::{Context, Result};
-use std::process::Command;
-use std::path::Path;
 use std::env;
 use std::fs::OpenOptions;
 use std::io::Write;
+use std::path::Path;
+use std::process::Command;
 
 use crate::cmd::{Execute, Install};
 
@@ -13,41 +13,44 @@ impl Execute for Install {
             "verilator" => {
                 println!("Installing Verilator...");
                 install_verilator()?;
-            },
+            }
             "icarus-verilog" => {
                 println!("Installing Icarus Verilog...");
                 install_icarus_verilog()?;
-            },
+            }
             "chipyard" => {
                 println!("Installing Chipyard...");
                 install_chipyard()?;
-            },
+            }
             "openroad" => {
                 println!("Installing OpenROAD...");
                 install_openroad()?;
-            },
+            }
             "edalize" => {
                 println!("Installing Edalize...");
                 install_edalize()?;
-            },
+            }
             "yosys" => {
                 println!("Installing Yosys...");
                 install_yosys()?;
-            },
+            }
             "riscv" => {
                 println!("Installing RISC-V toolchain...");
                 install_riscv()?;
-            },
+            }
             "nextpnr" => {
                 println!("Installing NextPNR...");
                 install_nextpnr()?;
-            },
+            }
             "project-xray" => {
                 println!("Installing Project XRay...");
                 install_xray()?;
-            },
+            }
             _ => {
-                println!("Tool '{}' is not recognized for installation.", self.tool_name);
+                println!(
+                    "Tool '{}' is not recognized for installation.",
+                    self.tool_name
+                );
             }
         }
 
@@ -179,7 +182,12 @@ fn install_chipyard() -> Result<()> {
 
     // Download Chipyard binary
     let status = Command::new("curl")
-        .args(["-L", "https://github.com/ucb-bar/chipyard/releases/latest/download/chipyard", "-o", install_dir.join("chipyard").to_str().unwrap()])
+        .args([
+            "-L",
+            "https://github.com/ucb-bar/chipyard/releases/latest/download/chipyard",
+            "-o",
+            install_dir.join("chipyard").to_str().unwrap(),
+        ])
         .status()
         .context("Failed to download Chipyard binary")?;
 
@@ -211,12 +219,17 @@ fn install_edalize() -> Result<()> {
     } else if check_command("python") {
         ("python", "pip")
     } else {
-        println!("Neither Python 3 nor Python 2 is installed. Please install Python before proceeding.");
+        println!(
+            "Neither Python 3 nor Python 2 is installed. Please install Python before proceeding."
+        );
         return Ok(());
     };
 
     if !check_command(pip_cmd) {
-        println!("{} is not installed. Please install pip before proceeding.", pip_cmd);
+        println!(
+            "{} is not installed. Please install pip before proceeding.",
+            pip_cmd
+        );
         return Ok(());
     }
 
@@ -251,10 +264,7 @@ fn install_edalize() -> Result<()> {
 }
 
 fn check_command(cmd: &str) -> bool {
-    Command::new(cmd)
-        .arg("--version")
-        .output()
-        .is_ok()
+    Command::new(cmd).arg("--version").output().is_ok()
 }
 
 fn install_openroad() -> Result<()> {
@@ -378,7 +388,11 @@ fn install_yosys() -> Result<()> {
 fn install_riscv() -> Result<()> {
     println!("Installing RISC-V toolchain...");
     Command::new("git")
-        .args(["clone", "--recursive", "https://github.com/riscv/riscv-gnu-toolchain.git"])
+        .args([
+            "clone",
+            "--recursive",
+            "https://github.com/riscv/riscv-gnu-toolchain.git",
+        ])
         .status()?;
 
     // Change to the cloned directory
@@ -386,7 +400,29 @@ fn install_riscv() -> Result<()> {
 
     // Step 2: Install prerequisites (for Ubuntu/Debian)
     Command::new("sudo")
-        .args(["apt-get", "install", "autoconf", "automake", "autotools-dev", "curl", "python3", "libmpc-dev", "libmpfr-dev", "libgmp-dev", "gawk", "build-essential", "bison", "flex", "texinfo", "gperf", "libtool", "patchutils", "bc", "zlib1g-dev", "libexpat-dev"])
+        .args([
+            "apt-get",
+            "install",
+            "autoconf",
+            "automake",
+            "autotools-dev",
+            "curl",
+            "python3",
+            "libmpc-dev",
+            "libmpfr-dev",
+            "libgmp-dev",
+            "gawk",
+            "build-essential",
+            "bison",
+            "flex",
+            "texinfo",
+            "gperf",
+            "libtool",
+            "patchutils",
+            "bc",
+            "zlib1g-dev",
+            "libexpat-dev",
+        ])
         .status()?;
 
     // Step 3: Create install directory
@@ -399,16 +435,12 @@ fn install_riscv() -> Result<()> {
         .arg("--prefix=/opt/riscv")
         .status()?;
 
-    Command::new("sudo")
-        .arg("make")
-        .status()?;
+    Command::new("sudo").arg("make").status()?;
 
     // Step 5: Add the toolchain to PATH
     let home = env::var("HOME")?;
     let bashrc_path = Path::new(&home).join(".bashrc");
-    let mut bashrc = OpenOptions::new()
-        .append(true)
-        .open(bashrc_path)?;
+    let mut bashrc = OpenOptions::new().append(true).open(bashrc_path)?;
 
     writeln!(bashrc, "\nexport PATH=$PATH:/opt/riscv/bin")?;
 

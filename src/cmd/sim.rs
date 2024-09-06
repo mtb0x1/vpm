@@ -1,16 +1,16 @@
-use anyhow::{Context, Result};
-use std::process::Command;
-use std::env;
-use std::path::{Path, PathBuf};
-use std::fs::{File,write,remove_file};
 use crate::cmd::{Execute, Sim};
-use std::io::{BufRead, BufReader};
+use anyhow::{Context, Result};
 use fancy_regex::Regex;
+use std::env;
+use std::fs::{remove_file, write, File};
+use std::io::{BufRead, BufReader};
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
 impl Execute for Sim {
     async fn execute(&self) -> Result<()> {
         let mut verilog_files = self.verilog_files.clone();
-        
+
         if !testbench_exists(&verilog_files) {
             generate_and_add_testbench(&mut verilog_files)?;
         }
@@ -28,7 +28,9 @@ impl Execute for Sim {
 }
 
 fn testbench_exists(verilog_files: &[String]) -> bool {
-    verilog_files.iter().any(|file| file.to_lowercase().contains("_tb.v"))
+    verilog_files
+        .iter()
+        .any(|file| file.to_lowercase().contains("_tb.v"))
 }
 
 fn generate_and_add_testbench(verilog_files: &mut Vec<String>) -> Result<()> {
@@ -36,9 +38,14 @@ fn generate_and_add_testbench(verilog_files: &mut Vec<String>) -> Result<()> {
         let is_systemverilog = first_file.ends_with(".sv");
         let testbench_content = generate_testbench(first_file, is_systemverilog)
             .context("Failed to generate testbench. Please check if the Verilog file is valid.")?;
-        let testbench_path = format!("{}_tb.{}", first_file.trim_end_matches(if is_systemverilog { ".sv" } else { ".v" }), if is_systemverilog { "sv" } else { "v" });
-        write(&testbench_path, testbench_content)
-            .context("Failed to write testbench file. Please check if you have write permissions.")?;
+        let testbench_path = format!(
+            "{}_tb.{}",
+            first_file.trim_end_matches(if is_systemverilog { ".sv" } else { ".v" }),
+            if is_systemverilog { "sv" } else { "v" }
+        );
+        write(&testbench_path, testbench_content).context(
+            "Failed to write testbench file. Please check if you have write permissions.",
+        )?;
         // Remove comments from the original Verilog file
         remove_comments_from_file(first_file)?;
 
@@ -46,7 +53,9 @@ fn generate_and_add_testbench(verilog_files: &mut Vec<String>) -> Result<()> {
         println!("Generated testbench: {}", testbench_path);
         Ok(())
     } else {
-        Err(anyhow::anyhow!("No Verilog files provided. Please specify at least one Verilog file."))
+        Err(anyhow::anyhow!(
+            "No Verilog files provided. Please specify at least one Verilog file."
+        ))
     }
 }
 
@@ -59,8 +68,10 @@ fn run_simulation_with_waveform(output_path: &Path) -> Result<()> {
     let output = cmd.output()
         .context("Failed to run simulation with VCD output. Please check if 'vvp' is installed and accessible.")?;
     if !output.status.success() {
-        return Err(anyhow::anyhow!("Simulation failed: {}. Please check your Verilog code for errors.", 
-            String::from_utf8_lossy(&output.stderr)));
+        return Err(anyhow::anyhow!(
+            "Simulation failed: {}. Please check your Verilog code for errors.",
+            String::from_utf8_lossy(&output.stderr)
+        ));
     }
     println!("Generated waveform file: {}", vcd_path.display());
     Ok(())
@@ -89,7 +100,13 @@ pub fn generate_testbench(module_path: &str, is_systemverilog: bool) -> Result<S
 }
 
 #[allow(clippy::type_complexity)]
-fn extract_module_info(module_path: &str) -> Result<(String, Vec<(String, Option<String>, String)>, Vec<(String, String)>)> {
+fn extract_module_info(
+    module_path: &str,
+) -> Result<(
+    String,
+    Vec<(String, Option<String>, String)>,
+    Vec<(String, String)>,
+)> {
     let file = File::open(module_path)
         .context(format!("Failed to open module file: {}. Please check if the file exists and you have read permissions.", module_path))?;
     let reader = BufReader::new(file);
@@ -99,7 +116,8 @@ fn extract_module_info(module_path: &str) -> Result<(String, Vec<(String, Option
     let mut parameters = Vec::new();
     let mut in_module = false;
     let module_regex = Regex::new(r"module\s+(\w+)\s*(?:\(|#)").unwrap();
-    let port_regex = Regex::new(r"(input|output|inout)\s+(?:reg|wire|logic)?\s*(\[.*?\])?\s*(\w+)").unwrap();
+    let port_regex =
+        Regex::new(r"(input|output|inout)\s+(?:reg|wire|logic)?\s*(\[.*?\])?\s*(\w+)").unwrap();
     let parameter_regex = Regex::new(r"parameter\s+(\w+)\s*=\s*([^,\)]+)").unwrap();
     let inline_parameter_regex = Regex::new(r"(\w+)\s*=\s*([^,\)]+)").unwrap();
 
@@ -112,26 +130,26 @@ fn extract_module_info(module_path: &str) -> Result<(String, Vec<(String, Option
             }
         } else {
             for capture in port_regex.captures_iter(&line).flatten() {
-                    let direction = capture[1].to_string();
-                    let bus_width = capture.get(2).map(|m| m.as_str().to_string());
-                    let name = capture[3].to_string();
-                    ports.push((direction, bus_width, name));
+                let direction = capture[1].to_string();
+                let bus_width = capture.get(2).map(|m| m.as_str().to_string());
+                let name = capture[3].to_string();
+                ports.push((direction, bus_width, name));
             }
             for capture in parameter_regex.captures_iter(&line).flatten() {
-                    let name = capture[1].to_string();
-                    let value = capture[2].to_string();
-                    if let Some(existing) = parameters.iter_mut().find(|(n, _)| n == &name) {
-                        existing.1 = value;
-                    } else {
-                        parameters.push((name, value));
-                    }
+                let name = capture[1].to_string();
+                let value = capture[2].to_string();
+                if let Some(existing) = parameters.iter_mut().find(|(n, _)| n == &name) {
+                    existing.1 = value;
+                } else {
+                    parameters.push((name, value));
+                }
             }
             for capture in inline_parameter_regex.captures_iter(&line).flatten() {
-                    let name = capture[1].to_string();
-                    let value = capture[2].to_string();
-                    if !parameters.iter().any(|(n, _)| n == &name) {
-                        parameters.push((name, value));
-                    }
+                let name = capture[1].to_string();
+                let value = capture[2].to_string();
+                if !parameters.iter().any(|(n, _)| n == &name) {
+                    parameters.push((name, value));
+                }
             }
             if line.contains(");") {
                 break;
@@ -164,13 +182,33 @@ fn declare_parameters(parameters: &[(String, String)]) -> String {
     declarations
 }
 
-fn declare_wires_for_ports(ports: &[(String, Option<String>, String)], is_systemverilog: bool) -> String {
+fn declare_wires_for_ports(
+    ports: &[(String, Option<String>, String)],
+    is_systemverilog: bool,
+) -> String {
     let mut declarations = String::new();
     for (direction, bus_width, name) in ports {
         let wire_type = if is_systemverilog { "logic" } else { "reg" };
         let declaration = match bus_width {
-            Some(width) => format!("    {} {} {};\n", if direction == "input" { wire_type } else { "wire" }, width, name),
-            None => format!("    {} {};\n", if direction == "input" { wire_type } else { "wire" }, name),
+            Some(width) => format!(
+                "    {} {} {};\n",
+                if direction == "input" {
+                    wire_type
+                } else {
+                    "wire"
+                },
+                width,
+                name
+            ),
+            None => format!(
+                "    {} {};\n",
+                if direction == "input" {
+                    wire_type
+                } else {
+                    "wire"
+                },
+                name
+            ),
         };
         declarations.push_str(&declaration);
     }
@@ -178,45 +216,74 @@ fn declare_wires_for_ports(ports: &[(String, Option<String>, String)], is_system
     declarations
 }
 
-fn instantiate_module(module_name: &str, ports: &[(String, Option<String>, String)], parameters: &[(String, String)]) -> String {
+fn instantiate_module(
+    module_name: &str,
+    ports: &[(String, Option<String>, String)],
+    parameters: &[(String, String)],
+) -> String {
     let mut instantiation = String::new();
     if !parameters.is_empty() {
         instantiation.push_str(&format!("    {} #(\n", module_name));
         for (i, (name, _)) in parameters.iter().enumerate() {
-            instantiation.push_str(&format!("        .{}({}){}\n", name, name, if i < parameters.len() - 1 { "," } else { "" }));
+            instantiation.push_str(&format!(
+                "        .{}({}){}\n",
+                name,
+                name,
+                if i < parameters.len() - 1 { "," } else { "" }
+            ));
         }
         instantiation.push_str("    ) uut (\n");
     } else {
         instantiation.push_str(&format!("    {} uut (\n", module_name));
     }
     for (i, (_, _, name)) in ports.iter().enumerate() {
-        instantiation.push_str(&format!("        .{}({}){}\n", name, name, if i < ports.len() - 1 { "," } else { "" }));
+        instantiation.push_str(&format!(
+            "        .{}({}){}\n",
+            name,
+            name,
+            if i < ports.len() - 1 { "," } else { "" }
+        ));
     }
     instantiation.push_str("    );\n\n");
     instantiation
 }
 
 fn generate_clock(ports: &[(String, Option<String>, String)]) -> String {
-    if let Some((_, _, clock_name)) = ports.iter().find(|(_, _, name)| name.to_lowercase().contains("clk")) {
+    if let Some((_, _, clock_name)) = ports
+        .iter()
+        .find(|(_, _, name)| name.to_lowercase().contains("clk"))
+    {
         format!("    localparam CLOCK_PERIOD = 10;\n    initial begin\n        {} = 0;\n        forever #(CLOCK_PERIOD/2) {} = ~{};\n    end\n\n", clock_name, clock_name, clock_name)
     } else {
         String::new()
     }
 }
 
-fn generate_initial_block(ports: &[(String, Option<String>, String)], is_systemverilog: bool) -> String {
-    let mut initial_block = String::from("    initial begin\n        $dumpfile(\"waveform.vcd\");\n        $dumpvars(0, uut);\n\n");
+fn generate_initial_block(
+    ports: &[(String, Option<String>, String)],
+    is_systemverilog: bool,
+) -> String {
+    let mut initial_block = String::from(
+        "    initial begin\n        $dumpfile(\"waveform.vcd\");\n        $dumpvars(0, uut);\n\n",
+    );
     for (direction, bus_width, name) in ports {
         if direction == "input" && !name.to_lowercase().contains("clk") {
             match bus_width {
                 Some(width) => {
-                    let width_value = width.trim_matches(|c| c == '[' || c == ']').split(':').next().unwrap_or("0");
+                    let width_value = width
+                        .trim_matches(|c| c == '[' || c == ']')
+                        .split(':')
+                        .next()
+                        .unwrap_or("0");
                     if is_systemverilog {
-                        initial_block.push_str(&format!("        {} = '{{{} {{1'b0}}}};\n", name, width_value));
+                        initial_block.push_str(&format!(
+                            "        {} = '{{{} {{1'b0}}}};\n",
+                            name, width_value
+                        ));
                     } else {
                         initial_block.push_str(&format!("        {} = {{'b0}};\n", name));
                     }
-                },
+                }
                 None => initial_block.push_str(&format!("        {} = 1'b0;\n", name)),
             }
         }
@@ -225,7 +292,10 @@ fn generate_initial_block(ports: &[(String, Option<String>, String)], is_systemv
     initial_block
 }
 
-fn generate_check_outputs_task(ports: &[(String, Option<String>, String)], is_systemverilog: bool) -> String {
+fn generate_check_outputs_task(
+    ports: &[(String, Option<String>, String)],
+    is_systemverilog: bool,
+) -> String {
     let mut task = String::from("    task check_outputs;\n");
     if is_systemverilog {
         task.push_str("        input string test_case;\n");
@@ -239,7 +309,10 @@ fn generate_check_outputs_task(ports: &[(String, Option<String>, String)], is_sy
                 Some(_) => "%h",
                 None => "%b",
             };
-            task.push_str(&format!("            $display(\"  {} = {}\", {});\n", name, format_specifier, name));
+            task.push_str(&format!(
+                "            $display(\"  {} = {}\", {});\n",
+                name, format_specifier, name
+            ));
         }
     }
     task.push_str("        end\n    endtask\n\n");
@@ -247,8 +320,7 @@ fn generate_check_outputs_task(ports: &[(String, Option<String>, String)], is_sy
 }
 
 fn remove_comments_from_file(file_path: &str) -> Result<()> {
-    let file = File::open(file_path)
-        .context(format!("Failed to open file: {}", file_path))?;
+    let file = File::open(file_path).context(format!("Failed to open file: {}", file_path))?;
     let reader = BufReader::new(file);
     let mut content = String::new();
 
@@ -264,8 +336,10 @@ fn remove_comments_from_file(file_path: &str) -> Result<()> {
         }
     }
 
-    write(file_path, content)
-        .context(format!("Failed to write updated content to file: {}", file_path))?;
+    write(file_path, content).context(format!(
+        "Failed to write updated content to file: {}",
+        file_path
+    ))?;
 
     Ok(())
 }
@@ -280,11 +354,16 @@ pub fn compile_verilog(verilog_files: &[String]) -> Result<PathBuf> {
     let command_status = run_iverilog_command(output_path.to_str().unwrap(), verilog_files)?;
 
     if !command_status.success() {
-        return Err(anyhow::anyhow!("Failed to compile Verilog files. Please check your Verilog code for syntax errors."));
+        return Err(anyhow::anyhow!(
+            "Failed to compile Verilog files. Please check your Verilog code for syntax errors."
+        ));
     }
 
     if !output_path.exists() {
-        return Err(anyhow::anyhow!("Output binary not found: {:?}. Compilation may have failed silently.", output_path));
+        return Err(anyhow::anyhow!(
+            "Output binary not found: {:?}. Compilation may have failed silently.",
+            output_path
+        ));
     }
 
     Ok(output_path)
@@ -296,7 +375,10 @@ fn generate_random_output_name() -> String {
         .collect()
 }
 
-fn run_iverilog_command(output_name: &str, verilog_files: &[String]) -> Result<std::process::ExitStatus> {
+fn run_iverilog_command(
+    output_name: &str,
+    verilog_files: &[String],
+) -> Result<std::process::ExitStatus> {
     let mut command = Command::new("iverilog");
     command.arg("-o").arg(output_name);
     for file in verilog_files {
@@ -311,12 +393,13 @@ pub fn run_simulation(output_path: &PathBuf) -> Result<()> {
 
     let current_dir = env::current_dir()
         .context("Failed to get current directory. Please check your file system permissions.")?;
-    
+
     let binary_path: PathBuf = current_dir.join(output_path);
 
-    let status = Command::new(&binary_path)
-        .status()
-        .context(format!("Failed to execute simulation. Please ensure the binary at {:?} is executable.", binary_path))?;
+    let status = Command::new(&binary_path).status().context(format!(
+        "Failed to execute simulation. Please ensure the binary at {:?} is executable.",
+        binary_path
+    ))?;
 
     if !status.success() {
         eprintln!("Warning: Simulation completed with non-zero exit status. This may indicate errors in your Verilog code.");

@@ -6,9 +6,9 @@ use crate::cmd::{Execute, Upgrade};
 impl Execute for Upgrade {
     async fn execute(&self) -> Result<()> {
         println!("Upgrading VPM...");
-        
+
         upgrade_vpm()?;
-        
+
         println!("VPM upgrade completed successfully.");
         Ok(())
     }

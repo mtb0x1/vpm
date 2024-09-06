@@ -1,17 +1,20 @@
-use std::collections::HashSet;
-use std::path::{Path, PathBuf};
-use std::{fs::{create_dir_all,remove_dir_all,read_to_string,write,copy}, process::Command};
-use anyhow::{Context, Result};
-use once_cell::sync::Lazy;
-use tree_sitter::{Node, Parser, Query, QueryCursor};
 use crate::cmd::{Execute, Include};
 use crate::toml::{add_dependency, add_top_module};
-use walkdir::{DirEntry, WalkDir};
+use anyhow::{Context, Result};
 use fancy_regex::Regex;
+use once_cell::sync::Lazy;
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
+use std::{
+    fs::{copy, create_dir_all, read_to_string, remove_dir_all, write},
+    process::Command,
+};
+use tree_sitter::{Node, Parser, Query, QueryCursor};
+use walkdir::{DirEntry, WalkDir};
 
 use dialoguer::{theme::ColorfulTheme, MultiSelect};
-use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
+use fuzzy_matcher::FuzzyMatcher;
 use std::io::{self, Write};
 
 impl Execute for Include {
@@ -75,11 +78,14 @@ fn get_files(directory: &str) -> Vec<String> {
 }
 
 fn get_relative_paths(files: &[String], tmp_path: &Path) -> Vec<String> {
-    files.iter()
-        .map(|file| file.strip_prefix(tmp_path.to_string_lossy().as_ref())
-            .unwrap_or(file)
-            .trim_start_matches('/')
-            .to_string())
+    files
+        .iter()
+        .map(|file| {
+            file.strip_prefix(tmp_path.to_string_lossy().as_ref())
+                .unwrap_or(file)
+                .trim_start_matches('/')
+                .to_string()
+        })
         .collect()
 }
 
@@ -106,7 +112,9 @@ fn select_modules(items: &[String]) -> Result<HashSet<String>> {
             .collect();
 
         let selection = MultiSelect::with_theme(&ColorfulTheme::default())
-            .with_prompt("Toggle items to include with the space bar. Hit enter to start a new search")
+            .with_prompt(
+                "Toggle items to include with the space bar. Hit enter to start a new search",
+            )
             .items(&filtered_items)
             .interact()?;
 
@@ -121,13 +129,26 @@ fn select_modules(items: &[String]) -> Result<HashSet<String>> {
     Ok(selected_items)
 }
 
-fn process_selected_modules(url: &str, tmp_path: &PathBuf, selected_items: &HashSet<String>, riscv: bool) -> Result<()> {
+fn process_selected_modules(
+    url: &str,
+    tmp_path: &PathBuf,
+    selected_items: &HashSet<String>,
+    riscv: bool,
+) -> Result<()> {
     for item in selected_items {
-        let displayed_path = item.strip_prefix(tmp_path.to_string_lossy().as_ref()).unwrap_or(item).trim_start_matches('/');
+        let displayed_path = item
+            .strip_prefix(tmp_path.to_string_lossy().as_ref())
+            .unwrap_or(item)
+            .trim_start_matches('/');
         println!("Including module: {}", displayed_path);
-        
+
         let full_path = tmp_path.join(displayed_path);
-        let module_path = full_path.strip_prefix(tmp_path).unwrap_or(&full_path).to_str().unwrap().trim_start_matches('/');
+        let module_path = full_path
+            .strip_prefix(tmp_path)
+            .unwrap_or(&full_path)
+            .to_str()
+            .unwrap()
+            .trim_start_matches('/');
         println!("Module path: {}", module_path);
 
         include_module_from_url(module_path, url, riscv)?;
@@ -136,20 +157,24 @@ fn process_selected_modules(url: &str, tmp_path: &PathBuf, selected_items: &Hash
     if selected_items.is_empty() {
         println!("No modules selected. Including entire repository.");
         include_repo_from_url(url, "./vpm_modules/")?;
-}
+    }
 
     Ok(())
 }
 
 fn print_success_message(url: &str, selected_items: &HashSet<String>) {
     if !selected_items.is_empty() {
-        let installed_modules = selected_items.iter()
+        let installed_modules = selected_items
+            .iter()
             .map(|item| item.to_string())
             .collect::<Vec<String>>()
             .join(", ");
         println!("Successfully installed module(s): {}", installed_modules);
     } else {
-        println!("Successfully installed repository '{}'.", name_from_url(url));
+        println!(
+            "Successfully installed repository '{}'.",
+            name_from_url(url)
+        );
     }
 }
 
@@ -197,21 +222,26 @@ fn generate_top_v_content(module_path: &str) -> Result<String> {
     top_content.push_str("// Auto-generated top.v file for RISC-V\n\n");
 
     // Use regex to find module declaration
-    let module_re = regex::Regex::new(r"module\s+(\w+)\s*(?:#\s*\(([\s\S]*?)\))?\s*\(([\s\S]*?)\);").unwrap();
+    let module_re =
+        regex::Regex::new(r"module\s+(\w+)\s*(?:#\s*\(([\s\S]*?)\))?\s*\(([\s\S]*?)\);").unwrap();
     if let Some(captures) = module_re.captures(&module_content) {
         let module_name = captures.get(1).unwrap().as_str();
         println!("Module name: {}", module_name);
 
         // Extract parameters
         let params = captures.get(2).map_or(Vec::new(), |m| {
-            m.as_str().lines()
+            m.as_str()
+                .lines()
                 .map(|line| line.trim())
                 .filter(|line| !line.is_empty())
                 .collect()
         });
 
         // Extract ports
-        let ports: Vec<&str> = captures.get(3).unwrap().as_str()
+        let ports: Vec<&str> = captures
+            .get(3)
+            .unwrap()
+            .as_str()
             .lines()
             .map(|line| line.trim())
             .filter(|line| !line.is_empty())
@@ -237,11 +267,18 @@ fn generate_top_v_content(module_path: &str) -> Result<String> {
         top_content.push_str(") cpu (\n");
 
         // Connect ports
-        let port_re = regex::Regex::new(r"(input|output|inout)\s+(?:wire|reg)?\s*(?:\[.*?\])?\s*(\w+)").unwrap();
+        let port_re =
+            regex::Regex::new(r"(input|output|inout)\s+(?:wire|reg)?\s*(?:\[.*?\])?\s*(\w+)")
+                .unwrap();
         for (i, port) in ports.iter().enumerate() {
             if let Some(port_captures) = port_re.captures(port) {
                 let port_name = port_captures.get(2).unwrap().as_str();
-                top_content.push_str(&format!("    .{}({}){}\n", port_name, port_name, if i < ports.len() - 1 { "," } else { "" }));
+                top_content.push_str(&format!(
+                    "    .{}({}){}\n",
+                    port_name,
+                    port_name,
+                    if i < ports.len() - 1 { "," } else { "" }
+                ));
             }
         }
         top_content.push_str(");\n\n");
@@ -254,14 +291,19 @@ fn generate_top_v_content(module_path: &str) -> Result<String> {
 }
 
 fn generate_xdc_content(module_path: &str) -> Result<String> {
-    println!("Generating constraints.xdc file for Xilinx Artix-7 board in {}", module_path);
+    println!(
+        "Generating constraints.xdc file for Xilinx Artix-7 board in {}",
+        module_path
+    );
     let module_content = read_to_string(module_path)?;
 
     let mut xdc_content = String::new();
     xdc_content.push_str("## Auto-generated constraints.xdc file for Xilinx Artix-7 board\n\n");
 
     // Use regex to find all ports
-    let port_re = regex::Regex::new(r"(?m)^\s*(input|output|inout)\s+(?:wire|reg)?\s*(?:\[.*?\])?\s*(\w+)").unwrap();
+    let port_re =
+        regex::Regex::new(r"(?m)^\s*(input|output|inout)\s+(?:wire|reg)?\s*(?:\[.*?\])?\s*(\w+)")
+            .unwrap();
     let mut ports = Vec::new();
 
     for captures in port_re.captures_iter(&module_content) {
@@ -289,9 +331,12 @@ fn generate_xdc_content(module_path: &str) -> Result<String> {
         if let Some((_, pin)) = pin_mappings.iter().find(|&&(p, _)| p == port_name) {
             let iostandard = match port_name {
                 "clk" => "LVCMOS33",
-                _ => "LVCMOS33"
+                _ => "LVCMOS33",
             };
-            xdc_content.push_str(&format!("set_property -dict {{ PACKAGE_PIN {} IOSTANDARD {} }} [get_ports {{ {} }}]\n", pin, iostandard, port_name));
+            xdc_content.push_str(&format!(
+                "set_property -dict {{ PACKAGE_PIN {} IOSTANDARD {} }} [get_ports {{ {} }}]\n",
+                pin, iostandard, port_name
+            ));
         } else {
             println!("Warning: No pin mapping found for port: {}", port_name);
         }
@@ -303,7 +348,9 @@ fn generate_xdc_content(module_path: &str) -> Result<String> {
         xdc_content.push_str("create_clock -period 10.000 -name sys_clk_pin -waveform {0.000 5.000} -add [get_ports { clk }]\n");
     } else {
         println!("Warning: No clock signal found. XDC file may be incomplete.");
-        xdc_content.push_str("\n## Warning: No clock signal found. Please add clock constraints manually.\n");
+        xdc_content.push_str(
+            "\n## Warning: No clock signal found. Please add clock constraints manually.\n",
+        );
     }
 
     Ok(xdc_content)
@@ -319,8 +366,15 @@ pub fn include_module_from_url(module_path: &str, url: &str, riscv: bool) -> Res
         .unwrap_or(module_path);
     let destination = format!("./vpm_modules/{}", module_name);
     create_dir_all(&destination)?;
-    process_module(package_name, module_path, destination.to_owned(), &mut HashSet::new(), url, true)?;
-    
+    process_module(
+        package_name,
+        module_path,
+        destination.to_owned(),
+        &mut HashSet::new(),
+        url,
+        true,
+    )?;
+
     let module_file_name = Path::new(&destination)
         .file_name()
         .and_then(|name| name.to_str())
@@ -330,7 +384,9 @@ pub fn include_module_from_url(module_path: &str, url: &str, riscv: bool) -> Res
     if !module_path.exists() {
         let module_path = Path::new(&destination).join(format!("{}.sv", module_file_name));
         if !module_path.exists() {
-            return Err(anyhow::anyhow!("Module file not found in the destination folder"));
+            return Err(anyhow::anyhow!(
+                "Module file not found in the destination folder"
+            ));
         }
     }
 
@@ -341,15 +397,28 @@ pub fn include_module_from_url(module_path: &str, url: &str, riscv: bool) -> Res
         // Generate .xdc file for Xilinx Artix-7 board
         let xdc_content = generate_xdc_content(&format!("{}/top.v", destination))?;
         write(format!("{}/constraints.xdc", destination), xdc_content)?;
-        println!("Created constraints.xdc file for Xilinx Artix-7 board in {}", destination);
+        println!(
+            "Created constraints.xdc file for Xilinx Artix-7 board in {}",
+            destination
+        );
     }
     add_top_module(url, module_path.to_str().unwrap())?;
-    
+
     Ok(())
 }
 
-pub fn process_module(package_name: &str, module: &str, destination: String, visited: &mut HashSet<String>, url: &str, is_top_module: bool) -> Result<HashSet<String>> {
-    let module_name = module.strip_suffix(".v").or_else(|| module.strip_suffix(".sv")).unwrap_or(module);
+pub fn process_module(
+    package_name: &str,
+    module: &str,
+    destination: String,
+    visited: &mut HashSet<String>,
+    url: &str,
+    is_top_module: bool,
+) -> Result<HashSet<String>> {
+    let module_name = module
+        .strip_suffix(".v")
+        .or_else(|| module.strip_suffix(".sv"))
+        .unwrap_or(module);
     let module_with_ext = if module.ends_with(".v") || module.ends_with(".sv") {
         module.to_string()
     } else {
@@ -371,30 +440,85 @@ pub fn process_module(package_name: &str, module: &str, destination: String, vis
     if is_full_filepath(&module_with_ext) {
         println!("Full filepath detected for module '{}'", module_with_ext);
         let dir_entry = filepath_to_dir_entry(file_path)?;
-        process_file(&dir_entry, &destination, module, url, visited, is_top_module)?;
+        process_file(
+            &dir_entry,
+            &destination,
+            module,
+            url,
+            visited,
+            is_top_module,
+        )?;
         processed_modules.insert(module_with_ext.clone());
     } else {
-        println!("Full filepath not detected for module '{}'", module_with_ext);
-        process_non_full_filepath(module_name, &tmp_path, &target_path, url, visited, is_top_module, &mut processed_modules)?;
+        println!(
+            "Full filepath not detected for module '{}'",
+            module_with_ext
+        );
+        process_non_full_filepath(
+            module_name,
+            &tmp_path,
+            &target_path,
+            url,
+            visited,
+            is_top_module,
+            &mut processed_modules,
+        )?;
     }
 
-    let submodules = download_and_process_submodules(package_name, module, &destination, url, visited, is_top_module)?;
+    let submodules = download_and_process_submodules(
+        package_name,
+        module,
+        &destination,
+        url,
+        visited,
+        is_top_module,
+    )?;
     processed_modules.extend(submodules);
 
     Ok(processed_modules)
 }
 
-fn process_non_full_filepath(module_name: &str, tmp_path: &PathBuf, target_path: &Path, url: &str, visited: &mut HashSet<String>, is_top_module: bool, processed_modules: &mut HashSet<String>) -> Result<()> {
+fn process_non_full_filepath(
+    module_name: &str,
+    tmp_path: &PathBuf,
+    target_path: &Path,
+    url: &str,
+    visited: &mut HashSet<String>,
+    is_top_module: bool,
+    processed_modules: &mut HashSet<String>,
+) -> Result<()> {
     let matching_entries = find_matching_entries(module_name, tmp_path);
-    println!("Found {} matching entries for module '{}'", matching_entries.len(), module_name);
+    println!(
+        "Found {} matching entries for module '{}'",
+        matching_entries.len(),
+        module_name
+    );
     if matching_entries.is_empty() {
-        println!("No matching files found for module '{}'. Skipping...", module_name);
+        println!(
+            "No matching files found for module '{}'. Skipping...",
+            module_name
+        );
     } else if matching_entries.len() == 1 {
         let dir_entry = filepath_to_dir_entry(matching_entries[0].clone())?;
-        process_file(&dir_entry, target_path.to_str().unwrap(), module_name, url, visited, is_top_module)?;
+        process_file(
+            &dir_entry,
+            target_path.to_str().unwrap(),
+            module_name,
+            url,
+            visited,
+            is_top_module,
+        )?;
         processed_modules.insert(format!("{}.v", module_name));
     } else {
-        process_multiple_matches(matching_entries, target_path, module_name, url, visited, is_top_module, processed_modules)?;
+        process_multiple_matches(
+            matching_entries,
+            target_path,
+            module_name,
+            url,
+            visited,
+            is_top_module,
+            processed_modules,
+        )?;
     }
 
     Ok(())
@@ -405,15 +529,26 @@ fn find_matching_entries(module_name: &str, tmp_path: &PathBuf) -> Vec<PathBuf> 
         .into_iter()
         .filter_map(Result::ok)
         .filter(|entry| {
-            entry.file_name().to_str() == Some(&format!("{}.sv", module_name)) || 
-            entry.file_name().to_str() == Some(&format!("{}.v", module_name))
+            entry.file_name().to_str() == Some(&format!("{}.sv", module_name))
+                || entry.file_name().to_str() == Some(&format!("{}.v", module_name))
         })
         .map(|entry| entry.path().to_path_buf())
         .collect()
 }
 
-fn process_multiple_matches(matching_entries: Vec<PathBuf>, target_path: &Path, module_name: &str, url: &str, visited: &mut HashSet<String>, is_top_module: bool, processed_modules: &mut HashSet<String>) -> Result<()> {
-    println!("Multiple modules found for '{}'. Please choose:", module_name);
+fn process_multiple_matches(
+    matching_entries: Vec<PathBuf>,
+    target_path: &Path,
+    module_name: &str,
+    url: &str,
+    visited: &mut HashSet<String>,
+    is_top_module: bool,
+    processed_modules: &mut HashSet<String>,
+) -> Result<()> {
+    println!(
+        "Multiple modules found for '{}'. Please choose:",
+        module_name
+    );
     for (i, entry) in matching_entries.iter().enumerate() {
         println!("{}: {}", i + 1, entry.display());
     }
@@ -424,7 +559,14 @@ fn process_multiple_matches(matching_entries: Vec<PathBuf>, target_path: &Path, 
 
     if index > 0 && index <= matching_entries.len() {
         let dir_entry = filepath_to_dir_entry(matching_entries[index - 1].clone())?;
-        process_file(&dir_entry, target_path.to_str().unwrap(), module_name, url, visited, is_top_module)?;
+        process_file(
+            &dir_entry,
+            target_path.to_str().unwrap(),
+            module_name,
+            url,
+            visited,
+            is_top_module,
+        )?;
         processed_modules.insert(format!("{}.v", module_name));
     } else {
         anyhow::bail!("Invalid choice");
@@ -433,15 +575,28 @@ fn process_multiple_matches(matching_entries: Vec<PathBuf>, target_path: &Path, 
     Ok(())
 }
 
-fn process_file(entry: &DirEntry, destination: &str, module_path: &str, url: &str, visited: &mut HashSet<String>, is_top_module: bool) -> Result<()> {
+fn process_file(
+    entry: &DirEntry,
+    destination: &str,
+    module_path: &str,
+    url: &str,
+    visited: &mut HashSet<String>,
+    is_top_module: bool,
+) -> Result<()> {
     let target_path = PathBuf::from(destination);
-    let extension = entry.path().extension().and_then(|s| s.to_str()).unwrap_or("v");
+    let extension = entry
+        .path()
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("v");
     copy(entry.path(), target_path.join(entry.file_name()))?;
 
     let contents = read_to_string(entry.path())?;
     let mut parser = Parser::new();
     parser.set_language(tree_sitter_verilog::language())?;
-    let tree = parser.parse(&contents, None).context("Failed to parse file")?;
+    let tree = parser
+        .parse(&contents, None)
+        .context("Failed to parse file")?;
 
     let header_content = generate_headers(tree.root_node(), &contents)?;
     let module_name = Path::new(module_path)
@@ -453,9 +608,16 @@ fn process_file(entry: &DirEntry, destination: &str, module_path: &str, url: &st
     } else {
         module_name.to_string()
     };
-    let header_filename = format!("{}.{}", module_name.strip_suffix(".v").unwrap_or(module_name), if extension == "sv" { "svh" } else { "vh" });
+    let header_filename = format!(
+        "{}.{}",
+        module_name.strip_suffix(".v").unwrap_or(module_name),
+        if extension == "sv" { "svh" } else { "vh" }
+    );
     write(target_path.join(&header_filename), header_content)?;
-    println!("Generating header file: {}", target_path.join(&header_filename).to_str().unwrap());
+    println!(
+        "Generating header file: {}",
+        target_path.join(&header_filename).to_str().unwrap()
+    );
 
     let full_module_path = target_path.join(&module_name_with_ext);
     update_lockfile(&full_module_path, url, &contents, visited, is_top_module)?;
@@ -463,7 +625,14 @@ fn process_file(entry: &DirEntry, destination: &str, module_path: &str, url: &st
     Ok(())
 }
 
-fn download_and_process_submodules(package_name: &str, module_path: &str, destination: &str, url: &str, visited: &mut HashSet<String>, _is_top_module: bool) -> Result<HashSet<String>> {
+fn download_and_process_submodules(
+    package_name: &str,
+    module_path: &str,
+    destination: &str,
+    url: &str,
+    visited: &mut HashSet<String>,
+    _is_top_module: bool,
+) -> Result<HashSet<String>> {
     let module_name = Path::new(module_path)
         .file_stem()
         .and_then(|s| s.to_str())
@@ -481,21 +650,32 @@ fn download_and_process_submodules(package_name: &str, module_path: &str, destin
     let contents = match read_to_string(&full_module_path) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("Warning: Failed to read file {}: {}. Skipping this module.", full_module_path.display(), e);
+            eprintln!(
+                "Warning: Failed to read file {}: {}. Skipping this module.",
+                full_module_path.display(),
+                e
+            );
             return Ok(HashSet::new());
         }
     };
-    
+
     let mut parser = Parser::new();
     if let Err(e) = parser.set_language(tree_sitter_verilog::language()) {
-        eprintln!("Warning: Failed to set parser language: {}. Skipping submodule processing.", e);
+        eprintln!(
+            "Warning: Failed to set parser language: {}. Skipping submodule processing.",
+            e
+        );
         return Ok(HashSet::new());
     }
 
     let submodules = match get_submodules(&contents) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("Warning: Failed to get submodules from {}: {}. Continuing without submodules.", full_module_path.display(), e);
+            eprintln!(
+                "Warning: Failed to get submodules from {}: {}. Continuing without submodules.",
+                full_module_path.display(),
+                e
+            );
             HashSet::new()
         }
     };
@@ -511,36 +691,54 @@ fn download_and_process_submodules(package_name: &str, module_path: &str, destin
         if !visited.contains(&submodule_with_ext) {
             let submodule_destination = PathBuf::from(destination);
             if let Err(e) = create_dir_all(&submodule_destination) {
-                eprintln!("Warning: Failed to create directory {}: {}. Skipping this submodule.", submodule_destination.display(), e);
+                eprintln!(
+                    "Warning: Failed to create directory {}: {}. Skipping this submodule.",
+                    submodule_destination.display(),
+                    e
+                );
                 continue;
             }
-            
+
             let submodule_url = format!("{}/{}", url, submodule_with_ext);
-            if let Err(e) = include_repo_from_url(&submodule_url, submodule_destination.to_str().unwrap()) {
-                eprintln!("Warning: Failed to include repo from URL {}: {}. Skipping this submodule.", submodule_url, e);
+            if let Err(e) =
+                include_repo_from_url(&submodule_url, submodule_destination.to_str().unwrap())
+            {
+                eprintln!(
+                    "Warning: Failed to include repo from URL {}: {}. Skipping this submodule.",
+                    submodule_url, e
+                );
                 continue;
             }
-            
+
             match process_module(
                 package_name,
                 &submodule_with_ext,
                 submodule_destination.to_str().unwrap().to_string(),
                 visited,
                 &submodule_url,
-                false
+                false,
             ) {
                 Ok(processed_submodules) => {
                     all_submodules.insert(submodule_with_ext.clone());
                     all_submodules.extend(processed_submodules);
-                },
+                }
                 Err(e) => {
-                    eprintln!("Warning: Failed to process submodule {}: {}. Skipping this submodule.", submodule_with_ext, e);
+                    eprintln!(
+                        "Warning: Failed to process submodule {}: {}. Skipping this submodule.",
+                        submodule_with_ext, e
+                    );
                     continue;
                 }
             }
 
             let full_submodule_path = submodule_destination.join(&submodule_with_ext);
-            if let Err(e) = update_lockfile(&full_submodule_path, &submodule_url, &contents, visited, false) {
+            if let Err(e) = update_lockfile(
+                &full_submodule_path,
+                &submodule_url,
+                &contents,
+                visited,
+                false,
+            ) {
                 eprintln!("Warning: Failed to update lockfile for {}: {}. Continuing without updating lockfile.", full_submodule_path.display(), e);
             }
         }
@@ -549,12 +747,26 @@ fn download_and_process_submodules(package_name: &str, module_path: &str, destin
     Ok(all_submodules)
 }
 
-fn update_lockfile(full_path: &Path, url: &str, contents: &str, visited: &HashSet<String>, is_top_module: bool) -> Result<()> {
+fn update_lockfile(
+    full_path: &Path,
+    url: &str,
+    contents: &str,
+    visited: &HashSet<String>,
+    is_top_module: bool,
+) -> Result<()> {
     let mut lockfile = read_to_string("vpm.lock").unwrap_or_default();
     let module_entry = if is_top_module {
-        format!("[[package]]\nfull_path = \"{}\"\nsource = \"{}\"\nparents = []\n", full_path.display(), url)
+        format!(
+            "[[package]]\nfull_path = \"{}\"\nsource = \"{}\"\nparents = []\n",
+            full_path.display(),
+            url
+        )
     } else {
-        format!("[[package]]\nfull_path = \"{}\"\nsource = \"{}\"\n", full_path.display(), url)
+        format!(
+            "[[package]]\nfull_path = \"{}\"\nsource = \"{}\"\n",
+            full_path.display(),
+            url
+        )
     };
 
     let mut parser = Parser::new();
@@ -563,11 +775,15 @@ fn update_lockfile(full_path: &Path, url: &str, contents: &str, visited: &HashSe
     let submodules_vec: Vec<String> = submodules.into_iter().collect();
 
     if !lockfile.contains(&format!("full_path = \"{}\"", full_path.display())) {
-        let formatted_submodules = submodules_vec.iter()
+        let formatted_submodules = submodules_vec
+            .iter()
             .map(|s| format!("  \"{}\",", s))
             .collect::<Vec<_>>()
             .join("\n");
-        lockfile.push_str(&format!("\n{}\nsubmodules = [\n{}\n]\n", module_entry, formatted_submodules));
+        lockfile.push_str(&format!(
+            "\n{}\nsubmodules = [\n{}\n]\n",
+            module_entry, formatted_submodules
+        ));
     } else {
         update_submodules(&mut lockfile, &module_entry, &submodules_vec);
     }
@@ -575,15 +791,28 @@ fn update_lockfile(full_path: &Path, url: &str, contents: &str, visited: &HashSe
     for submodule in &submodules_vec {
         if !visited.contains(submodule) {
             let submodule_path = full_path.parent().unwrap().join(submodule);
-            if let Some(existing_entry) = lockfile.find(&format!("\n[[package]]\nfull_path = \"{}\"", submodule_path.display())) {
-                let parent_start = lockfile[existing_entry..].find("parents = [").map(|i| existing_entry + i);
+            if let Some(existing_entry) = lockfile.find(&format!(
+                "\n[[package]]\nfull_path = \"{}\"",
+                submodule_path.display()
+            )) {
+                let parent_start = lockfile[existing_entry..]
+                    .find("parents = [")
+                    .map(|i| existing_entry + i);
                 if let Some(start) = parent_start {
-                    let end = lockfile[start..].find(']').map(|i| start + i + 1).unwrap_or(lockfile.len());
+                    let end = lockfile[start..]
+                        .find(']')
+                        .map(|i| start + i + 1)
+                        .unwrap_or(lockfile.len());
                     let current_parents = lockfile[start..end].to_string();
-                    let new_parents = if current_parents.contains(&full_path.display().to_string()) {
+                    let new_parents = if current_parents.contains(&full_path.display().to_string())
+                    {
                         current_parents
                     } else {
-                        format!("{}  \"{}\",\n]", &current_parents[..current_parents.len() - 1], full_path.display())
+                        format!(
+                            "{}  \"{}\",\n]",
+                            &current_parents[..current_parents.len() - 1],
+                            full_path.display()
+                        )
                     };
                     lockfile.replace_range(start..end, &new_parents);
                 }
@@ -599,9 +828,23 @@ fn update_lockfile(full_path: &Path, url: &str, contents: &str, visited: &HashSe
 }
 
 fn update_submodules(lockfile: &mut String, module_entry: &str, submodules: &[String]) {
-    if let Some(start) = lockfile.find(module_entry).and_then(|pos| lockfile[pos..].find("submodules = [").map(|offset| pos + offset)) {
-        let end = lockfile[start..].find(']').map(|pos| start + pos + 1).unwrap_or(lockfile.len());
-        let new_modules = format!("submodules = [\n{}\n]", submodules.iter().map(|m| format!("  \"{}\",", m)).collect::<Vec<_>>().join("\n"));
+    if let Some(start) = lockfile.find(module_entry).and_then(|pos| {
+        lockfile[pos..]
+            .find("submodules = [")
+            .map(|offset| pos + offset)
+    }) {
+        let end = lockfile[start..]
+            .find(']')
+            .map(|pos| start + pos + 1)
+            .unwrap_or(lockfile.len());
+        let new_modules = format!(
+            "submodules = [\n{}\n]",
+            submodules
+                .iter()
+                .map(|m| format!("  \"{}\",", m))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
         lockfile.replace_range(start..end, &new_modules);
     }
 }
@@ -649,7 +892,7 @@ pub fn generate_headers(root_node: Node, contents: &str) -> Result<String> {
                 _ => {}
             }
         }
-        
+
         header_content.push_str(&format!(
             "`ifndef {}_H\n`define {}_H\n\n",
             module_name.to_uppercase(),
@@ -657,17 +900,11 @@ pub fn generate_headers(root_node: Node, contents: &str) -> Result<String> {
         ));
 
         if !params.is_empty() {
-            header_content.push_str(&format!(
-                "// Parameters\n{}\n\n",
-                params.trim()
-            ));
+            header_content.push_str(&format!("// Parameters\n{}\n\n", params.trim()));
         }
 
         if !ports.is_empty() {
-            header_content.push_str(&format!(
-                "// Ports\n{}\n\n",
-                ports.trim()
-            ));
+            header_content.push_str(&format!("// Ports\n{}\n\n", ports.trim()));
         }
 
         header_content.push_str(&format!(
@@ -680,11 +917,12 @@ pub fn generate_headers(root_node: Node, contents: &str) -> Result<String> {
     Ok(header_content)
 }
 
-
 pub fn get_submodules(contents: &str) -> Result<HashSet<String>> {
-    static REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(
+    static REGEX: Lazy<Regex> = Lazy::new(|| {
+        Regex::new(
         r"(?mi)^\s*(?!(always(_comb|_ff|_latch)?|assert|assign|assume|begin|case|cover|else|end(case|function|generate|module|primitive|table|task)?|enum|for|forever|function|generate|if|initial|input|int|localparam|logic|module|negedge|output|param(eter)?|posedge|primitive|real|reg|repeat|table|task|time|timescale|typedef|while|wire))(\w+)\s*(?:#\([\s.\w(\[\-:\]\),{'}`/+!~@#$%^&*=<>?]+\))?\s*[\w\[:\]]+\s*(?:\([\s.\w(\[\-:\]\),{'}`/+!~@#$%^&*=<>?]+\));"
-    ).unwrap());
+    ).unwrap()
+    });
     let submodules: HashSet<String> = REGEX
         .captures_iter(contents) // Iterate over captures
         .map(|caps| caps.unwrap().get(0).unwrap().as_str()) // Extract the matched string
@@ -704,8 +942,15 @@ pub fn include_repo_from_url(url: &str, location: &str) -> Result<()> {
 
 pub fn clone_repo(url: &str, repo_path: &Path) -> Result<()> {
     Command::new("git")
-        .args([ "clone", "--depth", "1", "--single-branch", "--jobs", "4",
-            url, repo_path.to_str().unwrap_or_default(),
+        .args([
+            "clone",
+            "--depth",
+            "1",
+            "--single-branch",
+            "--jobs",
+            "4",
+            url,
+            repo_path.to_str().unwrap_or_default(),
         ])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
