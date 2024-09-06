@@ -1,17 +1,31 @@
 use anyhow::Result;
 use std::fs;
-use std::path::{Path, PathBuf};
 use std::io::Write;
+use std::path::{Path, PathBuf};
 
-use crate::cmd::{Execute, Dotf};
+use crate::cmd::{Dotf, Execute};
 
 impl Execute for Dotf {
     async fn execute(&self) -> Result<()> {
         // Clear the .f file if it already exists
-        let top_module_file = Path::new(&self.path_to_top_module).file_name().and_then(|f| f.to_str()).unwrap_or("");
-        let top_module_dir = Path::new(&self.path_to_top_module).with_extension("").to_str().unwrap_or("").to_string();
-        let filelist_name = format!("{}.f", top_module_file.trim_end_matches(".sv").trim_end_matches(".v"));
-        let filelist_path = PathBuf::from("vpm_modules").join(&top_module_dir).join(&filelist_name);
+        let top_module_file = Path::new(&self.path_to_top_module)
+            .file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or("");
+        let top_module_dir = Path::new(&self.path_to_top_module)
+            .with_extension("")
+            .to_str()
+            .unwrap_or("")
+            .to_string();
+        let filelist_name = format!(
+            "{}.f",
+            top_module_file
+                .trim_end_matches(".sv")
+                .trim_end_matches(".v")
+        );
+        let filelist_path = PathBuf::from("vpm_modules")
+            .join(&top_module_dir)
+            .join(&filelist_name);
 
         if filelist_path.exists() {
             fs::write(&filelist_path, "")?;
@@ -25,16 +39,40 @@ pub fn append_modules_to_filelist(top_module_path: &str, sub: bool) -> Result<()
     let vpm_modules_dir = PathBuf::from("./vpm_modules");
     let mut visited_modules: Vec<String> = Vec::new();
 
-    let top_module_file = Path::new(top_module_path).file_name().and_then(|f| f.to_str()).unwrap_or("");
-    let top_module_dir = Path::new(top_module_path).with_extension("").to_str().unwrap_or("").to_string();
-    let filelist_name = format!("{}.f", top_module_file.trim_end_matches(".sv").trim_end_matches(".v"));
-    let filelist_path = PathBuf::from("vpm_modules").join(&top_module_dir).join(&filelist_name);
+    let top_module_file = Path::new(top_module_path)
+        .file_name()
+        .and_then(|f| f.to_str())
+        .unwrap_or("");
+    let top_module_dir = Path::new(top_module_path)
+        .with_extension("")
+        .to_str()
+        .unwrap_or("")
+        .to_string();
+    let filelist_name = format!(
+        "{}.f",
+        top_module_file
+            .trim_end_matches(".sv")
+            .trim_end_matches(".v")
+    );
+    let filelist_path = PathBuf::from("vpm_modules")
+        .join(&top_module_dir)
+        .join(&filelist_name);
 
     let mut filepaths = Vec::new();
     let mut f_statements = Vec::new();
     let mut define_statements = Vec::new();
 
-    append_module(&vpm_modules_dir, top_module_file, top_module_file, &mut visited_modules, sub, &filelist_path, &mut filepaths, &mut f_statements, &mut define_statements)?;
+    append_module(
+        &vpm_modules_dir,
+        top_module_file,
+        top_module_file,
+        &mut visited_modules,
+        sub,
+        &filelist_path,
+        &mut filepaths,
+        &mut f_statements,
+        &mut define_statements,
+    )?;
 
     // Write all filepaths together
     let mut file = fs::OpenOptions::new()
@@ -43,7 +81,13 @@ pub fn append_modules_to_filelist(top_module_path: &str, sub: bool) -> Result<()
         .open(&filelist_path)?;
 
     // Add +incdir+ statement
-    file.write_all(format!("+incdir+{}\n\n", vpm_modules_dir.join(&top_module_dir).display()).as_bytes())?;
+    file.write_all(
+        format!(
+            "+incdir+{}\n\n",
+            vpm_modules_dir.join(&top_module_dir).display()
+        )
+        .as_bytes(),
+    )?;
 
     for filepath in filepaths {
         file.write_all(format!("{}\n", filepath).as_bytes())?;
@@ -101,7 +145,11 @@ fn append_module(
                 let trimmed_line = line.trim();
                 if trimmed_line.starts_with("module") {
                     in_module = true;
-                    current_module_name = trimmed_line.split_whitespace().nth(1).unwrap_or("").to_string();
+                    current_module_name = trimmed_line
+                        .split_whitespace()
+                        .nth(1)
+                        .unwrap_or("")
+                        .to_string();
                 } else if trimmed_line.starts_with("endmodule") {
                     in_module = false;
                     if !module_defines.is_empty() {
@@ -118,7 +166,10 @@ fn append_module(
                             for define in &module_defines {
                                 submodule_file.write_all(format!("{}\n", define).as_bytes())?;
                             }
-                            f_statements.push(format!("-f {}", submodule_filelist_path.to_str().unwrap_or_default()));
+                            f_statements.push(format!(
+                                "-f {}",
+                                submodule_filelist_path.to_str().unwrap_or_default()
+                            ));
                         }
                     }
                     module_defines.clear();
@@ -177,7 +228,8 @@ fn append_module(
                         filelist_path,
                         filepaths,
                         f_statements,
-                        define_statements)?;
+                        define_statements,
+                    )?;
                 }
             }
 
@@ -192,7 +244,8 @@ fn append_module(
                 filelist_path,
                 filepaths,
                 f_statements,
-                define_statements)?;
+                define_statements,
+            )?;
         }
     }
 
@@ -218,7 +271,9 @@ fn find_module_instantiations(
                 if let Ok(module) = first_child.utf8_text(contents.as_bytes()) {
                     let module_name_v = format!("{}.v", module);
                     let module_name_sv = format!("{}.sv", module);
-                    if !visited_modules.contains(&module_name_v) && !visited_modules.contains(&module_name_sv) {
+                    if !visited_modules.contains(&module_name_v)
+                        && !visited_modules.contains(&module_name_sv)
+                    {
                         visited_modules.push(module_name_v.clone());
                         visited_modules.push(module_name_sv.clone());
                         append_module(
@@ -230,7 +285,8 @@ fn find_module_instantiations(
                             filelist_path,
                             filepaths,
                             f_statements,
-                            define_statements)?;
+                            define_statements,
+                        )?;
                         append_module(
                             &PathBuf::from("./vpm_modules"),
                             &module_name_sv,
@@ -240,7 +296,8 @@ fn find_module_instantiations(
                             filelist_path,
                             filepaths,
                             f_statements,
-                            define_statements)?;
+                            define_statements,
+                        )?;
                     }
                 }
             }
@@ -255,8 +312,9 @@ fn find_module_instantiations(
             filelist_path,
             filepaths,
             f_statements,
-            define_statements)?;
+            define_statements,
+        )?;
     }
-    
+
     Ok(())
 }

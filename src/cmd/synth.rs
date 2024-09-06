@@ -1,8 +1,8 @@
-use anyhow::{Result, Context};
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use anyhow::{Context, Result};
 use std::fs::File;
 use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use crate::cmd::{Execute, Synth};
 
@@ -13,7 +13,7 @@ impl Execute for Synth {
             self.riscv,
             self.core_path.as_ref(),
             &self.board,
-            self.gen_yosys_script
+            self.gen_yosys_script,
         )
     }
 }
@@ -23,28 +23,38 @@ fn synthesize_design(
     riscv: bool,
     core_path: Option<&String>,
     board: &Option<String>,
-    gen_yosys_script: bool
+    gen_yosys_script: bool,
 ) -> Result<()> {
     let top_module_path = PathBuf::from(top_module_path);
     let (input_file, module_name, parent_dir, _) = extract_path_info(&top_module_path);
-    
+
     let script_content = match board {
         Some(board) if board.to_lowercase() == "xilinx" => {
             let board_name = "artix7";
-            let output_file = format!("{}/{}_{}_{}_synth.v", parent_dir, module_name, board_name, "xilinx");
-            generate_xilinx_script_content(&input_file, riscv, core_path.cloned(), &module_name, &output_file)?
-        },
+            let output_file = format!(
+                "{}/{}_{}_{}_synth.v",
+                parent_dir, module_name, board_name, "xilinx"
+            );
+            generate_xilinx_script_content(
+                &input_file,
+                riscv,
+                core_path.cloned(),
+                &module_name,
+                &output_file,
+            )?
+        }
         None => {
             let output_file = format!("{}/{}_synth.v", parent_dir, module_name);
             generate_yosys_script_content(&input_file, &module_name, &output_file)
-        },
+        }
         Some(other) => {
             return Err(anyhow::anyhow!("Unsupported board: {}", other));
         }
     };
 
     if gen_yosys_script {
-        let script_file = PathBuf::from(&parent_dir).join(format!("{}_synth_script.ys", module_name));
+        let script_file =
+            PathBuf::from(&parent_dir).join(format!("{}_synth_script.ys", module_name));
         write_script_to_file(&script_file, &script_content)?;
         println!("Yosys script generated at: {:?}", script_file);
     }
@@ -56,8 +66,17 @@ fn synthesize_design(
 
 fn extract_path_info(top_module_path: &Path) -> (String, String, String, String) {
     let input_file = top_module_path.to_str().unwrap().to_string();
-    let top_module = top_module_path.file_stem().unwrap().to_str().unwrap().to_string();
-    let parent_dir = top_module_path.parent().unwrap().to_string_lossy().to_string();
+    let top_module = top_module_path
+        .file_stem()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+    let parent_dir = top_module_path
+        .parent()
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
     let output_file = format!("{}/{}_synth.v", parent_dir, top_module);
     (input_file, top_module, parent_dir, output_file)
 }
@@ -77,13 +96,17 @@ opt
 # Write the synthesized design
 write_verilog {}
         "#,
-        input_file,
-        top_module,
-        output_file
+        input_file, top_module, output_file
     )
 }
 
-fn generate_xilinx_script_content(top_module_path_str: &str, riscv: bool, core_path: Option<String>, module_name: &str, output_file: &str) -> Result<String> {
+fn generate_xilinx_script_content(
+    top_module_path_str: &str,
+    riscv: bool,
+    core_path: Option<String>,
+    module_name: &str,
+    output_file: &str,
+) -> Result<String> {
     let mut script_content = format!(
         r#"
 # Read the SystemVerilog file
@@ -100,7 +123,9 @@ read_verilog -sv {core_path}
 "#
             ));
         } else {
-            return Err(anyhow::anyhow!("RISC-V core path is required when riscv flag is set"));
+            return Err(anyhow::anyhow!(
+                "RISC-V core path is required when riscv flag is set"
+            ));
         }
     }
 

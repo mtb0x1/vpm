@@ -1,17 +1,17 @@
 #[allow(clippy::module_inception)]
 mod cmd;
-mod upgrade;
-mod include;
-mod update;
-mod remove;
-mod dotf;
-mod list;
-mod install;
-mod sim;
 mod docs;
-mod synth;
-mod run;
+mod dotf;
+mod include;
+mod install;
+mod list;
 mod load;
+mod remove;
+mod run;
+mod sim;
+mod synth;
+mod update;
+mod upgrade;
 
 use anyhow::Result;
 
@@ -20,7 +20,6 @@ pub use crate::cmd::cmd::*;
 pub trait Execute {
     async fn execute(&self) -> Result<()>;
 }
-
 
 impl Execute for Cmd {
     async fn execute(&self) -> Result<()> {

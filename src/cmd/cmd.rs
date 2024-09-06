@@ -71,7 +71,6 @@ pub struct Remove {
     pub package_path: String,
 }
 
-
 #[derive(Debug, Parser)]
 #[clap(
     about,
@@ -93,7 +92,7 @@ pub struct Dotf {
     propagate_version = true,
     version
 )]
-pub struct Docs{
+pub struct Docs {
     #[arg(help = "Path of module to generate documentation for")]
     pub module_path: String,
     #[arg(help = "Url of repository to generate documentation for")]
@@ -148,7 +147,7 @@ pub struct List {}
     disable_help_subcommand = true,
     propagate_version = true,
     version
-)]  
+)]
 pub struct Synth {
     #[arg(help = "Top module path to synthesize")]
     pub top_module_path: String,
@@ -178,7 +177,6 @@ pub struct Load {
     pub constraints_path: String,
     #[arg(long, help = "Use RISC-V toolchain")]
     pub riscv: bool,
-
 }
 
 #[derive(Debug, Parser)]
