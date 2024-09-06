@@ -70,6 +70,7 @@ pub fn append_modules_to_filelist(top_module_path: &str, sub: bool) -> Result<()
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn append_module(
     dir: &Path,
     module: &str,
@@ -198,6 +199,7 @@ fn append_module(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn find_module_instantiations(
     root_node: tree_sitter::Node,
     top_module: &str,

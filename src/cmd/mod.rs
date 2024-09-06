@@ -1,3 +1,4 @@
+#[allow(clippy::module_inception)]
 mod cmd;
 mod upgrade;
 mod include;

@@ -179,7 +179,7 @@ fn install_chipyard() -> Result<()> {
 
     // Download Chipyard binary
     let status = Command::new("curl")
-        .args(&["-L", "https://github.com/ucb-bar/chipyard/releases/latest/download/chipyard", "-o", install_dir.join("chipyard").to_str().unwrap()])
+        .args(["-L", "https://github.com/ucb-bar/chipyard/releases/latest/download/chipyard", "-o", install_dir.join("chipyard").to_str().unwrap()])
         .status()
         .context("Failed to download Chipyard binary")?;
 
@@ -190,7 +190,7 @@ fn install_chipyard() -> Result<()> {
 
     // Make the binary executable
     let status = Command::new("chmod")
-        .args(&["+x", install_dir.join("chipyard").to_str().unwrap()])
+        .args(["+x", install_dir.join("chipyard").to_str().unwrap()])
         .status()
         .context("Failed to make Chipyard binary executable")?;
 
@@ -378,7 +378,7 @@ fn install_yosys() -> Result<()> {
 fn install_riscv() -> Result<()> {
     println!("Installing RISC-V toolchain...");
     Command::new("git")
-        .args(&["clone", "--recursive", "https://github.com/riscv/riscv-gnu-toolchain.git"])
+        .args(["clone", "--recursive", "https://github.com/riscv/riscv-gnu-toolchain.git"])
         .status()?;
 
     // Change to the cloned directory
@@ -386,12 +386,12 @@ fn install_riscv() -> Result<()> {
 
     // Step 2: Install prerequisites (for Ubuntu/Debian)
     Command::new("sudo")
-        .args(&["apt-get", "install", "autoconf", "automake", "autotools-dev", "curl", "python3", "libmpc-dev", "libmpfr-dev", "libgmp-dev", "gawk", "build-essential", "bison", "flex", "texinfo", "gperf", "libtool", "patchutils", "bc", "zlib1g-dev", "libexpat-dev"])
+        .args(["apt-get", "install", "autoconf", "automake", "autotools-dev", "curl", "python3", "libmpc-dev", "libmpfr-dev", "libgmp-dev", "gawk", "build-essential", "bison", "flex", "texinfo", "gperf", "libtool", "patchutils", "bc", "zlib1g-dev", "libexpat-dev"])
         .status()?;
 
     // Step 3: Create install directory
     Command::new("sudo")
-        .args(&["mkdir", "-p", "/opt/riscv"])
+        .args(["mkdir", "-p", "/opt/riscv"])
         .status()?;
 
     // Step 4: Configure and build the toolchain

@@ -39,7 +39,7 @@ impl VpmToml {
             initial_doc["package"] = Item::Table(Table::new());
             initial_doc["package"]["name"] = Item::Value(Value::from(Package::default().name));
             initial_doc["package"]["version"] = Item::Value(Value::from(Package::default().version));
-            initial_doc["package"]["authors"] = Item::Value(Value::from(Array::from(Package::default().authors.iter().map(|s| Value::from(s.to_string())).collect())));
+            initial_doc["package"]["authors"] = Item::Value(Package::default().authors.iter().map(|s| Value::from(s.to_string())).collect::<Value>());
             initial_doc["package"]["description"] = Item::Value(Value::from(Package::default().description));
             initial_doc["package"]["license"] = Item::Value(Value::from(Package::default().license));
 
@@ -135,6 +135,7 @@ pub fn add_top_module(repo_link: &str, module_path: &str) -> Result<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 pub fn remove_dependency(git: &str) -> Result<()> {
     let mut vpm_toml = VpmToml::from("vpm.toml");
     vpm_toml.remove_dependency(git);

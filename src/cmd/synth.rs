@@ -1,5 +1,5 @@
 use anyhow::{Result, Context};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::fs::File;
 use std::io::Write;
@@ -54,7 +54,7 @@ fn synthesize_design(
     Ok(())
 }
 
-fn extract_path_info(top_module_path: &PathBuf) -> (String, String, String, String) {
+fn extract_path_info(top_module_path: &Path) -> (String, String, String, String) {
     let input_file = top_module_path.to_str().unwrap().to_string();
     let top_module = top_module_path.file_stem().unwrap().to_str().unwrap().to_string();
     let parent_dir = top_module_path.parent().unwrap().to_string_lossy().to_string();

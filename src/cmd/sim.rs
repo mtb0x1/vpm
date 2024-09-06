@@ -2,11 +2,9 @@ use anyhow::{Context, Result};
 use std::process::Command;
 use std::env;
 use std::path::{Path, PathBuf};
-use std::fs;
-use fastrand;
+use std::fs::{File,write,remove_file};
 use crate::cmd::{Execute, Sim};
-use std::fs::File;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader};
 use fancy_regex::Regex;
 
 impl Execute for Sim {
@@ -39,7 +37,7 @@ fn generate_and_add_testbench(verilog_files: &mut Vec<String>) -> Result<()> {
         let testbench_content = generate_testbench(first_file, is_systemverilog)
             .context("Failed to generate testbench. Please check if the Verilog file is valid.")?;
         let testbench_path = format!("{}_tb.{}", first_file.trim_end_matches(if is_systemverilog { ".sv" } else { ".v" }), if is_systemverilog { "sv" } else { "v" });
-        fs::write(&testbench_path, testbench_content)
+        write(&testbench_path, testbench_content)
             .context("Failed to write testbench file. Please check if you have write permissions.")?;
         // Remove comments from the original Verilog file
         remove_comments_from_file(first_file)?;
@@ -90,6 +88,7 @@ pub fn generate_testbench(module_path: &str, is_systemverilog: bool) -> Result<S
     Ok(testbench)
 }
 
+#[allow(clippy::type_complexity)]
 fn extract_module_info(module_path: &str) -> Result<(String, Vec<(String, Option<String>, String)>, Vec<(String, String)>)> {
     let file = File::open(module_path)
         .context(format!("Failed to open module file: {}. Please check if the file exists and you have read permissions.", module_path))?;
@@ -112,16 +111,13 @@ fn extract_module_info(module_path: &str) -> Result<(String, Vec<(String, Option
                 in_module = true;
             }
         } else {
-            for capture_result in port_regex.captures_iter(&line) {
-                if let Ok(capture) = capture_result {
+            for capture in port_regex.captures_iter(&line).flatten() {
                     let direction = capture[1].to_string();
                     let bus_width = capture.get(2).map(|m| m.as_str().to_string());
                     let name = capture[3].to_string();
                     ports.push((direction, bus_width, name));
-                }
             }
-            for capture_result in parameter_regex.captures_iter(&line) {
-                if let Ok(capture) = capture_result {
+            for capture in parameter_regex.captures_iter(&line).flatten() {
                     let name = capture[1].to_string();
                     let value = capture[2].to_string();
                     if let Some(existing) = parameters.iter_mut().find(|(n, _)| n == &name) {
@@ -129,16 +125,13 @@ fn extract_module_info(module_path: &str) -> Result<(String, Vec<(String, Option
                     } else {
                         parameters.push((name, value));
                     }
-                }
             }
-            for capture_result in inline_parameter_regex.captures_iter(&line) {
-                if let Ok(capture) = capture_result {
+            for capture in inline_parameter_regex.captures_iter(&line).flatten() {
                     let name = capture[1].to_string();
                     let value = capture[2].to_string();
                     if !parameters.iter().any(|(n, _)| n == &name) {
                         parameters.push((name, value));
                     }
-                }
             }
             if line.contains(");") {
                 break;
@@ -167,7 +160,7 @@ fn declare_parameters(parameters: &[(String, String)]) -> String {
         declarations.push_str(&line);
         declarations.push_str(";\n");
     }
-    declarations.push_str("\n");
+    declarations.push('\n');
     declarations
 }
 
@@ -181,7 +174,7 @@ fn declare_wires_for_ports(ports: &[(String, Option<String>, String)], is_system
         };
         declarations.push_str(&declaration);
     }
-    declarations.push_str("\n");
+    declarations.push('\n');
     declarations
 }
 
@@ -271,13 +264,13 @@ fn remove_comments_from_file(file_path: &str) -> Result<()> {
         }
     }
 
-    fs::write(file_path, content)
+    write(file_path, content)
         .context(format!("Failed to write updated content to file: {}", file_path))?;
 
     Ok(())
 }
 
-pub fn compile_verilog(verilog_files: &Vec<String>) -> Result<PathBuf> {
+pub fn compile_verilog(verilog_files: &[String]) -> Result<PathBuf> {
     println!("Compiling Verilog files...");
 
     let first_file = &verilog_files[0];
@@ -331,7 +324,7 @@ pub fn run_simulation(output_path: &PathBuf) -> Result<()> {
         println!("Simulation completed successfully.");
     }
 
-    if let Err(e) = fs::remove_file(&binary_path) {
+    if let Err(e) = remove_file(&binary_path) {
         eprintln!("Warning: Failed to remove temporary binary file: {}. You may want to delete it manually.", e);
     }
 
