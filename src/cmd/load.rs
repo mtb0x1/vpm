@@ -22,11 +22,11 @@ fn load_xilinx(edif_path: &Path, constraints_path: &Path) -> Result<()> {
     let constraints_path_str = constraints_path.to_str().unwrap();
     
     Command::new("yosys")
-        .args(&["-p", &format!("read_edif {}; write_json design.json", edif_path_str)])
+        .args(["-p", &format!("read_edif {}; write_json design.json", edif_path_str)])
         .status()?;
 
     Command::new("nextpnr-xilinx")
-        .args(&[
+        .args([
             "--chipdb", "vpm_modules/chipdb-xc7a35t.bin",
             "--xdc", constraints_path_str,
             "--json", "design.json",
@@ -36,12 +36,12 @@ fn load_xilinx(edif_path: &Path, constraints_path: &Path) -> Result<()> {
         .status()?;
 
     let fasm_output = Command::new("fasm2frames")
-        .args(&["--part", "xc7a35tcsg324-1", "output.fasm"])
+        .args(["--part", "xc7a35tcsg324-1", "output.fasm"])
         .output()?;
     std::fs::write("output.frames", fasm_output.stdout)?;
 
     Command::new("xc7frames2bit")
-        .args(&[
+        .args([
             "--part_file", "vpm_modules/xc7a35tcsg324-1.yaml",
             "--part_name", "xc7a35tcsg324-1",
             "--frm_file", "output.frames",

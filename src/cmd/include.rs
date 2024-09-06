@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::{fs, process::Command};
+use std::{fs::{create_dir_all,remove_dir_all,read_to_string,write,copy}, process::Command};
 use anyhow::{Context, Result};
 use once_cell::sync::Lazy;
 use tree_sitter::{Node, Parser, Query, QueryCursor};
@@ -16,7 +16,7 @@ use std::io::{self, Write};
 
 impl Execute for Include {
     async fn execute(&self) -> Result<()> {
-        fs::create_dir_all("./vpm_modules")?;
+        create_dir_all("./vpm_modules")?;
         println!("Including from: '{}'", self.url);
         let repo_name = name_from_url(&self.url);
         let tmp_path = PathBuf::from("/tmp").join(repo_name);
@@ -35,14 +35,14 @@ fn include_entire_repo(url: &str, tmp_path: &PathBuf, riscv: bool) -> Result<()>
     include_repo_from_url(&url, "/tmp/")?;
     add_dependency(&url, None)?;
 
-    let files = get_files(&tmp_path.to_str().unwrap_or_default());
+    let files = get_files(tmp_path.to_str().unwrap_or_default());
     let items = get_relative_paths(&files, tmp_path);
 
     let selected_items = select_modules(&items)?;
 
     process_selected_modules(&url, tmp_path, &selected_items, riscv)?;
 
-    fs::remove_dir_all(tmp_path)?;
+    remove_dir_all(tmp_path)?;
     print_success_message(&url, &selected_items);
     Ok(())
 }
@@ -74,9 +74,9 @@ fn get_files(directory: &str) -> Vec<String> {
         .collect()
 }
 
-fn get_relative_paths(files: &[String], tmp_path: &PathBuf) -> Vec<String> {
+fn get_relative_paths(files: &[String], tmp_path: &Path) -> Vec<String> {
     files.iter()
-        .map(|file| file.strip_prefix(&tmp_path.to_string_lossy().as_ref())
+        .map(|file| file.strip_prefix(tmp_path.to_string_lossy().as_ref())
             .unwrap_or(file)
             .trim_start_matches('/')
             .to_string())
@@ -191,7 +191,7 @@ fn filepath_to_dir_entry(filepath: PathBuf) -> Result<DirEntry> {
 
 fn generate_top_v_content(module_path: &str) -> Result<String> {
     println!("Generating top.v file for RISC-V in {}", module_path);
-    let module_content = fs::read_to_string(module_path)?;
+    let module_content = read_to_string(module_path)?;
 
     let mut top_content = String::new();
     top_content.push_str("// Auto-generated top.v file for RISC-V\n\n");
@@ -255,7 +255,7 @@ fn generate_top_v_content(module_path: &str) -> Result<String> {
 
 fn generate_xdc_content(module_path: &str) -> Result<String> {
     println!("Generating constraints.xdc file for Xilinx Artix-7 board in {}", module_path);
-    let module_content = fs::read_to_string(module_path)?;
+    let module_content = read_to_string(module_path)?;
 
     let mut xdc_content = String::new();
     xdc_content.push_str("## Auto-generated constraints.xdc file for Xilinx Artix-7 board\n\n");
@@ -287,7 +287,10 @@ fn generate_xdc_content(module_path: &str) -> Result<String> {
     // Generate constraints for each port
     for (_port_type, port_name) in ports {
         if let Some((_, pin)) = pin_mappings.iter().find(|&&(p, _)| p == port_name) {
-            let iostandard = if port_name == "clk" { "LVCMOS33" } else { "LVCMOS33" };
+            let iostandard = match port_name {
+                "clk" => "LVCMOS33",
+                _ => "LVCMOS33"
+            };
             xdc_content.push_str(&format!("set_property -dict {{ PACKAGE_PIN {} IOSTANDARD {} }} [get_ports {{ {} }}]\n", pin, iostandard, port_name));
         } else {
             println!("Warning: No pin mapping found for port: {}", port_name);
@@ -296,8 +299,8 @@ fn generate_xdc_content(module_path: &str) -> Result<String> {
 
     // Add clock constraint
     if let Some((_, _clk_pin)) = pin_mappings.iter().find(|&&(p, _)| p == "clk") {
-        xdc_content.push_str(&format!("\n## Clock signal\n"));
-        xdc_content.push_str(&format!("create_clock -period 10.000 -name sys_clk_pin -waveform {{0.000 5.000}} -add [get_ports {{ clk }}]\n"));
+        xdc_content.push_str("\n## Clock signal\n");
+        xdc_content.push_str("create_clock -period 10.000 -name sys_clk_pin -waveform {0.000 5.000} -add [get_ports { clk }]\n");
     } else {
         println!("Warning: No clock signal found. XDC file may be incomplete.");
         xdc_content.push_str("\n## Warning: No clock signal found. Please add clock constraints manually.\n");
@@ -315,7 +318,7 @@ pub fn include_module_from_url(module_path: &str, url: &str, riscv: bool) -> Res
         .and_then(|s| s.to_str())
         .unwrap_or(module_path);
     let destination = format!("./vpm_modules/{}", module_name);
-    fs::create_dir_all(&destination)?;
+    create_dir_all(&destination)?;
     process_module(package_name, module_path, destination.to_owned(), &mut HashSet::new(), url, true)?;
     
     let module_file_name = Path::new(&destination)
@@ -332,12 +335,12 @@ pub fn include_module_from_url(module_path: &str, url: &str, riscv: bool) -> Res
     }
 
     if riscv {
-        let top_v_content = generate_top_v_content(&module_path.to_str().unwrap())?;
-        fs::write(format!("{}/top.v", destination), top_v_content)?;
+        let top_v_content = generate_top_v_content(module_path.to_str().unwrap())?;
+        write(format!("{}/top.v", destination), top_v_content)?;
         println!("Created top.v file for RISC-V in {}", destination);
         // Generate .xdc file for Xilinx Artix-7 board
         let xdc_content = generate_xdc_content(&format!("{}/top.v", destination))?;
-        fs::write(format!("{}/constraints.xdc", destination), xdc_content)?;
+        write(format!("{}/constraints.xdc", destination), xdc_content)?;
         println!("Created constraints.xdc file for Xilinx Artix-7 board in {}", destination);
     }
     add_top_module(url, module_path.to_str().unwrap())?;
@@ -368,7 +371,7 @@ pub fn process_module(package_name: &str, module: &str, destination: String, vis
     if is_full_filepath(&module_with_ext) {
         println!("Full filepath detected for module '{}'", module_with_ext);
         let dir_entry = filepath_to_dir_entry(file_path)?;
-        process_file(&dir_entry, &target_path.to_str().unwrap(), module, url, visited, is_top_module)?;
+        process_file(&dir_entry, &destination, module, url, visited, is_top_module)?;
         processed_modules.insert(module_with_ext.clone());
     } else {
         println!("Full filepath not detected for module '{}'", module_with_ext);
@@ -381,7 +384,7 @@ pub fn process_module(package_name: &str, module: &str, destination: String, vis
     Ok(processed_modules)
 }
 
-fn process_non_full_filepath(module_name: &str, tmp_path: &PathBuf, target_path: &PathBuf, url: &str, visited: &mut HashSet<String>, is_top_module: bool, processed_modules: &mut HashSet<String>) -> Result<()> {
+fn process_non_full_filepath(module_name: &str, tmp_path: &PathBuf, target_path: &Path, url: &str, visited: &mut HashSet<String>, is_top_module: bool, processed_modules: &mut HashSet<String>) -> Result<()> {
     let matching_entries = find_matching_entries(module_name, tmp_path);
     println!("Found {} matching entries for module '{}'", matching_entries.len(), module_name);
     if matching_entries.is_empty() {
@@ -409,7 +412,7 @@ fn find_matching_entries(module_name: &str, tmp_path: &PathBuf) -> Vec<PathBuf> 
         .collect()
 }
 
-fn process_multiple_matches(matching_entries: Vec<PathBuf>, target_path: &PathBuf, module_name: &str, url: &str, visited: &mut HashSet<String>, is_top_module: bool, processed_modules: &mut HashSet<String>) -> Result<()> {
+fn process_multiple_matches(matching_entries: Vec<PathBuf>, target_path: &Path, module_name: &str, url: &str, visited: &mut HashSet<String>, is_top_module: bool, processed_modules: &mut HashSet<String>) -> Result<()> {
     println!("Multiple modules found for '{}'. Please choose:", module_name);
     for (i, entry) in matching_entries.iter().enumerate() {
         println!("{}: {}", i + 1, entry.display());
@@ -433,9 +436,9 @@ fn process_multiple_matches(matching_entries: Vec<PathBuf>, target_path: &PathBu
 fn process_file(entry: &DirEntry, destination: &str, module_path: &str, url: &str, visited: &mut HashSet<String>, is_top_module: bool) -> Result<()> {
     let target_path = PathBuf::from(destination);
     let extension = entry.path().extension().and_then(|s| s.to_str()).unwrap_or("v");
-    fs::copy(entry.path(), &target_path.join(entry.file_name()))?;
+    copy(entry.path(), target_path.join(entry.file_name()))?;
 
-    let contents = fs::read_to_string(entry.path())?;
+    let contents = read_to_string(entry.path())?;
     let mut parser = Parser::new();
     parser.set_language(tree_sitter_verilog::language())?;
     let tree = parser.parse(&contents, None).context("Failed to parse file")?;
@@ -451,7 +454,7 @@ fn process_file(entry: &DirEntry, destination: &str, module_path: &str, url: &st
         module_name.to_string()
     };
     let header_filename = format!("{}.{}", module_name.strip_suffix(".v").unwrap_or(module_name), if extension == "sv" { "svh" } else { "vh" });
-    fs::write(target_path.join(&header_filename), header_content)?;
+    write(target_path.join(&header_filename), header_content)?;
     println!("Generating header file: {}", target_path.join(&header_filename).to_str().unwrap());
 
     let full_module_path = target_path.join(&module_name_with_ext);
@@ -475,7 +478,7 @@ fn download_and_process_submodules(package_name: &str, module_path: &str, destin
     };
 
     let full_module_path = PathBuf::from(destination).join(&module_name_with_ext);
-    let contents = match fs::read_to_string(&full_module_path) {
+    let contents = match read_to_string(&full_module_path) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("Warning: Failed to read file {}: {}. Skipping this module.", full_module_path.display(), e);
@@ -507,7 +510,7 @@ fn download_and_process_submodules(package_name: &str, module_path: &str, destin
         };
         if !visited.contains(&submodule_with_ext) {
             let submodule_destination = PathBuf::from(destination);
-            if let Err(e) = fs::create_dir_all(&submodule_destination) {
+            if let Err(e) = create_dir_all(&submodule_destination) {
                 eprintln!("Warning: Failed to create directory {}: {}. Skipping this submodule.", submodule_destination.display(), e);
                 continue;
             }
@@ -546,9 +549,8 @@ fn download_and_process_submodules(package_name: &str, module_path: &str, destin
     Ok(all_submodules)
 }
 
-fn update_lockfile(full_path: &PathBuf, url: &str, contents: &str, visited: &HashSet<String>, is_top_module: bool) -> Result<()> {
-    let mut lockfile = fs::read_to_string("vpm.lock").unwrap_or_default();
-    let full_module_path = format!("{}/{}", url, full_path.file_name().unwrap().to_str().unwrap());
+fn update_lockfile(full_path: &Path, url: &str, contents: &str, visited: &HashSet<String>, is_top_module: bool) -> Result<()> {
+    let mut lockfile = read_to_string("vpm.lock").unwrap_or_default();
     let module_entry = if is_top_module {
         format!("[[package]]\nfull_path = \"{}\"\nsource = \"{}\"\nparents = []\n", full_path.display(), url)
     } else {
@@ -592,7 +594,7 @@ fn update_lockfile(full_path: &PathBuf, url: &str, contents: &str, visited: &Has
         }
     }
 
-    fs::write("vpm.lock", lockfile)?;
+    write("vpm.lock", lockfile)?;
     Ok(())
 }
 
